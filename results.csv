@@ -2,7 +2,7 @@ run,success,time_min,coverage_pct,goals_sent,stuck_count,localization_error_m,no
 1,True,3.35,74.4,12,1,N/A,
 2,True,4.5,74.2,12,1,N/A,
 3,True,3.58,74.2,9,0,N/A,
-4,True,0.83,12.4,6,2,N/A,
+4,True,0.83,12.4,6,2,N/A,laptop sleep mid-run caused premature termination
 5,True,3.83,75.1,14,2,N/A,
 6,True,6.17,74.9,16,2,N/A,
 7,True,3.67,74.4,14,2,N/A,
