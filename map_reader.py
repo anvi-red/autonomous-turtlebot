@@ -7,9 +7,10 @@ from geometry_msgs.msg import PoseStamped
 import numpy as np
 from collections import deque
 
-MIN_FRONTIER_SIZE = 5  # ignore clusters smaller than this (likely noise/unreachable wall slivers)
+MIN_FRONTIER_SIZE = 10  # ignore clusters smaller than this (empirically noise in turtlebot3_world at 0.05m/cell)
 STUCK_REPEAT_LIMIT = 3  # how many times in a row we'll re-pick the same goal before giving up on it
-BLACKLIST_RADIUS = 3  # grid cells — how close a new centroid must be to a blacklisted one to be excluded
+BLACKLIST_RADIUS = 3    # grid cells — how close a new centroid must be to a blacklisted one to be excluded
+MAX_RECOVERIES = 5      # cancel and blacklist a goal if Nav2 triggers more than this many recoveries on it
 
 
 class MapReader(Node):
@@ -25,9 +26,10 @@ class MapReader(Node):
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.goal_in_progress = False  # guard so we don't send a new goal while one is active
 
-        self.last_centroid = None      # (row, col) of the last goal we picked
-        self.repeat_count = 0          # how many times in a row we've picked the same centroid
-        self.blacklist = []            # list of (row, col) centroids we've given up on
+        self.last_centroid = None         # (row, col) of the last goal we picked
+        self.repeat_count = 0             # how many times in a row we've picked the same centroid
+        self.blacklist = []               # list of (row, col) centroids we've given up on
+        self.current_goal_centroid = None # centroid of the goal currently being navigated to
 
     def odom_callback(self, msg):
         self.robot_x = msg.pose.pose.position.x
@@ -165,10 +167,27 @@ class MapReader(Node):
         goal_msg.pose.pose.orientation.w = 1.0  # no specific orientation, just face forward
 
         self.goal_in_progress = True
+        self.current_goal_centroid = self.last_centroid  # track for recovery-based blacklisting
         self.get_logger().info(f"Sending goal: x={x:.2f}, y={y:.2f}")
 
-        send_goal_future = self.nav_client.send_goal_async(goal_msg)
+        send_goal_future = self.nav_client.send_goal_async(
+            goal_msg, feedback_callback=self.goal_feedback_callback)
         send_goal_future.add_done_callback(self.goal_response_callback)
+
+    def goal_feedback_callback(self, feedback_msg):
+        recoveries = feedback_msg.feedback.number_of_recoveries
+        if recoveries > MAX_RECOVERIES:
+            self.get_logger().warn(
+                f"Too many recoveries ({recoveries}) on current goal — cancelling and blacklisting."
+            )
+            # blacklist the current goal's centroid so we don't return to it
+            if self.current_goal_centroid is not None:
+                self.blacklist.append(self.current_goal_centroid)
+                self.current_goal_centroid = None
+            # cancel via the stored goal handle
+            if hasattr(self, 'goal_handle') and self.goal_handle is not None:
+                self.goal_handle.cancel_goal_async()
+            self.goal_in_progress = False
 
     def goal_response_callback(self, future):
         goal_handle = future.result()
@@ -177,12 +196,14 @@ class MapReader(Node):
             self.goal_in_progress = False
             return
 
+        self.goal_handle = goal_handle  # store so we can cancel if needed
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(self.goal_result_callback)
 
     def goal_result_callback(self, future):
         result = future.result()
         self.get_logger().info(f"Navigation finished with status: {result.status}")
+        self.current_goal_centroid = None
         self.goal_in_progress = False  # ready for map_callback to pick a new goal next time
 
     def cluster_frontiers(self, frontiers):  # the clustering algorithm
