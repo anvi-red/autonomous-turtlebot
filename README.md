@@ -220,10 +220,3 @@ autonomous-turtlebot/
 ├── trajectory_overlay.png  # Ground truth vs SLAM path (top-down)
 └── error_over_time.png     # Position error (m) vs time
 ```
-
----
-
-## Resume entry
-
-> **Autonomous Robot Exploration | ROS2, Nav2, Python**
-> Built a frontier-based exploration node for TurtleBot3 in Gazebo — robot autonomously maps unknown environments without teleoperation using a custom occupancy grid analysis algorithm. Implemented BFS clustering, `size/distance` frontier scoring, and blacklist-based stuck detection. Diagnosed and resolved a ROS2 message type mismatch (Twist vs TwistStamped) blocking all Nav2 motion commands. Measured SLAM localization accuracy by comparing slam_toolbox pose estimates against Gazebo ground truth using a custom logging node and SE(2) Umeyama alignment — ATE RMSE 12.4 mm over a full exploration run. Validated across 20 automated test runs: 100% success rate, ~74.5% map coverage, ~4.2 min average exploration time.
