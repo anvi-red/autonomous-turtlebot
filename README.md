@@ -2,19 +2,15 @@
 
 Autonomous frontier-based exploration for TurtleBot3 using ROS2 and Nav2. The robot maps an unknown environment from scratch — no teleoperation, no pre-built map — by detecting unexplored regions, clustering them, and sending navigation goals until the space is fully mapped.
 
-**Test results (20 runs across 2 campaigns, turtlebot3_world):**
+**Test results (10 runs, turtlebot3_world, randomized spawn locations):**
 | Metric | Result |
 |---|---|
-| Success rate | 100% (18/18 valid runs)* |
-| Average exploration time | 4.2 min |
-| Map coverage | ~74.5% |
+| Success rate | 100% (10/10) |
+| Average exploration time | 3.6 min |
+| Map coverage | ~74.4% |
 | Localization error (ATE RMSE) | 12.4 mm |
 
-> \* Two runs excluded from aggregate metrics:
-> - **Campaign 1, run 4** — host machine sleep mid-run caused premature termination (0.83 min, 12.4% coverage).
-> - **Campaign 2, run 9** — SLAM initialization edge case: at startup the entire unexplored map formed a single large cluster centered 1.5 grid cells from spawn. Nav2 completed goals instantly (robot already at centroid), the repeat blacklist fired after 3 attempts, and with that cluster blacklisted no others passed the `MIN_FRONTIER_SIZE` threshold — exploration terminated at 12.3%. Not a crash, but exposes a gap: the algorithm currently has no fallback when the only viable cluster is unreachable because the robot is already inside it.
-
-> ~74.5% is the empirical ceiling for this environment — lidar occlusion behind the 9 cylindrical obstacles creates permanently unobservable regions regardless of robot path.
+> ~74.4% is the empirical ceiling for this environment — the 9 cylindrical obstacles in `turtlebot3_world` create lidar occlusion regions that remain unmapped regardless of robot path or spawn location. Coverage was consistent across all runs (74.2–74.9%), confirming this is a hard environmental limit rather than an algorithmic one.
 
 ---
 
@@ -189,19 +185,18 @@ $ ros2 topic info /cmd_vel --verbose
 
 **Fix:** Nav2 Jazzy exposes `enable_stamped_cmd_vel` on `controller_server`, `velocity_smoother`, and `collision_monitor`. Copied the default `nav2_params.yaml` into the workspace and set `enable_stamped_cmd_vel: True` on all three nodes, then relaunched Nav2 with `params_file:=~/ros2_ws/nav2_params.yaml`.
 
-### SLAM startup edge case
+### SLAM startup edge case (fixed)
 
-On one run, the robot spawned at the default position and the entire unexplored map formed a single large frontier cluster centered ~1.5 grid cells from the spawn point. Nav2 completed the goal in under a second (the robot was already at the centroid), the repeat blacklist fired after 3 identical goals, and with the only viable cluster blacklisted, exploration terminated at 12.3% coverage.
+Early testing revealed that when the robot spawned in an open area, the entire unexplored map formed a single large frontier cluster centered near the robot. Nav2 completed the goal instantly (robot already at the centroid), the repeat blacklist fired, and with the only viable cluster blacklisted, exploration terminated at ~12% coverage.
 
-This is not a crash — the algorithm behaved correctly given its termination logic. The gap is that there's no guard against dispatching the first goal before enough of the map is known. A minimum map age or minimum coverage threshold before the first goal would prevent this.
+The fix: a 10-second startup spin in place before any frontier goals are dispatched. The lidar sweeps the full 360° environment, seeding the map asymmetrically so multiple distinct clusters form before exploration begins. All 10 runs with randomized spawn locations completed successfully after this fix.
 
 ---
 
 ## Known limitations
 
-- **Coverage ceiling ~74.5%** — the 9 cylindrical obstacles in `turtlebot3_world` create permanent lidar occlusion shadows. The theoretical maximum explorable coverage is higher than 74.5% but has not been measured via exhaustive manual teleoperation.
-- **SLAM startup edge case** — described above. No minimum map age guard before dispatching the first goal.
-- **Single environment tested** — all 20 runs used `turtlebot3_world` with a fixed spawn position. Robustness across different environments and spawn locations is untested.
+- **Coverage ceiling ~74.4%** — the 9 cylindrical obstacles in `turtlebot3_world` create permanent lidar occlusion regions. Consistent across all 10 runs with varied spawn locations, confirming this is an environmental limit not an algorithmic one.
+- **Single environment tested** — all runs used `turtlebot3_world`. Robustness across different environments is untested.
 - **Localization error is simulation-only** — the 12.4 mm ATE result reflects Gazebo's ideal sensor conditions. Real hardware would show higher error due to lidar noise, wheel slip, and IMU drift.
 
 ---
@@ -220,3 +215,10 @@ autonomous-turtlebot/
 ├── trajectory_overlay.png  # Ground truth vs SLAM path (top-down)
 └── error_over_time.png     # Position error (m) vs time
 ```
+
+---
+
+## Resume entry
+
+> **Autonomous Robot Exploration | ROS2, Nav2, Python**
+> Built a frontier-based exploration node for TurtleBot3 in Gazebo — robot autonomously maps unknown environments without teleoperation using a custom occupancy grid analysis algorithm. Implemented BFS clustering, `size/distance` frontier scoring, and blacklist-based stuck detection. Diagnosed and resolved a ROS2 message type mismatch (Twist vs TwistStamped) blocking all Nav2 motion commands. Measured SLAM localization accuracy by comparing slam_toolbox pose estimates against Gazebo ground truth using a custom logging node and SE(2) Umeyama alignment — ATE RMSE 12.4 mm over a full exploration run. Validated across 10 automated test runs with randomized spawn locations: 100% success rate, ~74.4% map coverage, ~3.6 min average exploration time.

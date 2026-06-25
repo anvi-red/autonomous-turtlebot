@@ -3,9 +3,12 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from nav_msgs.msg import OccupancyGrid, Odometry
 from nav2_msgs.action import NavigateToPose
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, TwistStamped
 import numpy as np
 from collections import deque
+
+STARTUP_SPIN_DURATION = 10.0  # seconds to spin in place before frontier exploration begins
+STARTUP_SPIN_SPEED    = 0.6   # rad/s — one near-full rotation, seeds the map in all directions
 
 MIN_FRONTIER_SIZE = 10  # ignore clusters smaller than this (empirically noise in turtlebot3_world at 0.05m/cell)
 STUCK_REPEAT_LIMIT = 3  # how many times in a row we'll re-pick the same goal before giving up on it
@@ -31,11 +34,47 @@ class MapReader(Node):
         self.blacklist = []               # list of (row, col) centroids we've given up on
         self.current_goal_centroid = None # centroid of the goal currently being navigated to
 
+        # Startup spin — rotate in place before dispatching any frontier goals so the
+        # lidar seeds the map in all directions, preventing the single-cluster edge case
+        self.startup_spin_done  = False
+        self.startup_spin_start = None
+        self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
+        self.spin_timer  = self.create_timer(0.1, self._startup_spin_cb)
+
+    def _startup_spin_cb(self):
+        """Spin the robot in place for STARTUP_SPIN_DURATION seconds before exploration."""
+        if self.startup_spin_done:
+            self.spin_timer.cancel()
+            return
+
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self.startup_spin_start is None:
+            self.startup_spin_start = now
+            self.get_logger().info(
+                f"Startup spin: rotating for {STARTUP_SPIN_DURATION}s to seed the map...")
+
+        elapsed = now - self.startup_spin_start
+        msg = TwistStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+
+        if elapsed < STARTUP_SPIN_DURATION:
+            msg.twist.angular.z = STARTUP_SPIN_SPEED
+        else:
+            msg.twist.angular.z = 0.0  # stop
+            self.startup_spin_done = True
+            self.get_logger().info("Startup spin complete — beginning frontier exploration.")
+
+        self.cmd_vel_pub.publish(msg)
+
     def odom_callback(self, msg):
         self.robot_x = msg.pose.pose.position.x
         self.robot_y = msg.pose.pose.position.y
 
     def map_callback(self, msg):
+        # wait for startup spin to finish before dispatching any goals
+        if not self.startup_spin_done:
+            return
+
         # skip this whole cycle if we're still navigating to a previous goal
         if self.goal_in_progress:
             return

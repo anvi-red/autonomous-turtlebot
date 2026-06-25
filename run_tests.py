@@ -13,6 +13,7 @@ import time
 import csv
 import os
 import math
+import random
 import threading
 import rclpy
 from rclpy.node import Node
@@ -30,8 +31,24 @@ GAZEBO_WAIT  = 12
 SLAM_WAIT    = 6
 NAV2_WAIT    = 12
 
-SPAWN_X = 0.750
-SPAWN_Y = 0.35350
+# Cylinder centres from turtlebot3_world/model.sdf (3x3 grid, 1.1m spacing)
+CYLINDERS = [
+    (-1.1, -1.1), (-1.1, 0.0), (-1.1, 1.1),
+    ( 0.0, -1.1), ( 0.0, 0.0), ( 0.0, 1.1),
+    ( 1.1, -1.1), ( 1.1, 0.0), ( 1.1, 1.1),
+]
+CYLINDER_CLEARANCE = 0.40   # cylinder radius (0.15) + robot radius (~0.2) + margin
+SPAWN_BOUNDS       = 1.6    # stay within ±1.6 m to avoid walls
+
+
+def random_spawn():
+    """Return a random (x, y) spawn that clears all cylinders and walls."""
+    while True:
+        x = random.uniform(-SPAWN_BOUNDS, SPAWN_BOUNDS)
+        y = random.uniform(-SPAWN_BOUNDS, SPAWN_BOUNDS)
+        if all(math.hypot(x - cx, y - cy) >= CYLINDER_CLEARANCE
+               for cx, cy in CYLINDERS):
+            return round(x, 3), round(y, 3)
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -235,7 +252,7 @@ def main():
 
     # CSV setup
     fieldnames = [
-        'run', 'success', 'time_min', 'coverage_pct',
+        'run', 'spawn_x', 'spawn_y', 'success', 'time_min', 'coverage_pct',
         'goals_sent', 'stuck_count', 'localization_error_m', 'notes'
     ]
     with open(RESULTS_FILE, 'w', newline='') as f:
@@ -249,10 +266,14 @@ def main():
         print(f"  RUN {run_num} / {NUM_RUNS}")
         print(f"{'='*55}")
 
+        # Pick a random collision-free spawn for this run
+        spawn_x, spawn_y = random_spawn()
+        print(f"  [run_tests] Spawn: ({spawn_x}, {spawn_y})")
+
         # Launch stack
         gz_proc   = launch(
             ['ros2', 'launch', 'turtlebot3_gazebo', 'turtlebot3_world.launch.py',
-             f'x_pose:={SPAWN_X}', f'y_pose:={SPAWN_Y}'],
+             f'x_pose:={spawn_x}', f'y_pose:={spawn_y}'],
             'Gazebo', env
         )
         time.sleep(GAZEBO_WAIT)
@@ -287,6 +308,7 @@ def main():
             kill_all([gz_proc, slam_proc, nav2_proc, rviz_proc])
             row = dict(run=run_num, success=False, time_min=0, coverage_pct=0,
                        goals_sent=0, stuck_count=0, localization_error_m='N/A',
+                       spawn_x=spawn_x, spawn_y=spawn_y,
                        notes='map never appeared')
             with open(RESULTS_FILE, 'a', newline='') as f:
                 csv.DictWriter(f, fieldnames=fieldnames).writerow(row)
@@ -310,6 +332,8 @@ def main():
 
         row = {
             'run':                  run_num,
+            'spawn_x':              spawn_x,
+            'spawn_y':              spawn_y,
             'success':              success,
             'time_min':             round(elapsed / 60, 2),
             'coverage_pct':         coverage,

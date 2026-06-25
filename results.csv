@@ -1,11 +1,11 @@
-run,success,time_min,coverage_pct,goals_sent,stuck_count,localization_error_m,notes
-1,True,3.35,74.4,12,1,N/A,
-2,True,4.5,74.2,12,1,N/A,
-3,True,3.58,74.2,9,0,N/A,
-4,True,0.83,12.4,6,2,N/A,laptop sleep mid-run caused premature termination
-5,True,3.83,75.1,14,2,N/A,
-6,True,6.17,74.9,16,2,N/A,
-7,True,3.67,74.4,14,2,N/A,
-8,True,4.08,75.0,9,0,N/A,
-9,True,4.33,74.3,20,4,N/A,
-10,True,4.83,74.4,9,0,N/A,
+run,spawn_x,spawn_y,success,time_min,coverage_pct,goals_sent,stuck_count,localization_error_m,notes
+1,-0.666,1.294,True,2.27,74.3,8,0,N/A,
+2,-0.651,0.855,True,3.58,74.4,8,0,N/A,
+3,-0.84,0.626,True,4.5,74.5,14,1,N/A,
+4,-0.587,1.577,True,2.58,74.2,10,1,N/A,
+5,0.532,0.11,True,4.83,74.8,11,0,N/A,
+6,0.319,0.258,True,3.92,74.9,11,1,N/A,
+7,0.618,-0.174,True,4.0,74.2,12,1,N/A,
+8,0.27,-0.433,True,4.17,74.3,11,1,N/A,
+9,-0.681,-1.552,True,3.08,74.4,13,1,N/A,
+10,-0.232,-0.742,True,3.0,74.3,11,0,N/A,
