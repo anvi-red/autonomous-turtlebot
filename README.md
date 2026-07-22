@@ -1,6 +1,6 @@
 # autonomous-turtlebot
 
-Autonomous frontier-based exploration for TurtleBot3 using ROS2 and Nav2. The robot maps an unknown environment from scratch — no teleoperation, no pre-built map — by detecting unexplored regions, clustering them, and sending navigation goals until the space is fully mapped.
+Autonomous frontier-based exploration for TurtleBot3 using ROS2 and Nav2. The robot maps an unknown environment from scratch by detecting unexplored regions, clustering them, and sending navigation goals in a loop until the space is mapped
 
 **Test results (10 runs, turtlebot3_world, randomized spawn locations):**
 | Metric | Result |
